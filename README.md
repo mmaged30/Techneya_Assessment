@@ -475,18 +475,3 @@ Android 14 (API 34) x86_64 emulator, Wikipedia 50600-r-2026-07-28.
 - More reading-list behaviour: renaming a list, moving an article between lists, offline
   availability — all reachable from the screen objects that already exist.
 - A smoke subset for CI (`-Dgroups=smoke` already selects the end-to-end mobile test).
-
----
-
-## Troubleshooting
-
-| Symptom | Cause and fix |
-|---|---|
-| `Appium refused to create a session` | The Appium server is not running. Start it with `appium`, and check `adb devices` lists your device. |
-| `Could not resolve dependencies` on first build | The first build needs network access to Maven Central. Re-run `mvn clean compile`. |
-| Mobile tests fail on `search_card` or a list not being found | Usually a promotion that the app has newly added. The failure screenshot in `target/screenshots` shows what was actually on screen; add its dismisser to the `TRANSIENT_PROMOS` list in `AndroidScreenBase`. |
-| Everything times out on a slow machine | Raise the single wait window: `-Dtimeout.explicit=30`. |
-| `Timed out waiting for the root AccessibilityNodeInfo` | The app's main thread is saturated — usually an emulator with too little CPU. Give the emulator more cores, or close other load. |
-| Allure report is empty | The results land in `target/allure-results`; running `mvn clean` before `mvn allure:serve` deletes them. Run the tests and the report in that order without a `clean` in between. |
-| Allure shows tests but no steps inside them | The AspectJ weaver did not load. It is wired through surefire's `argLine`; a custom `-DargLine` on the command line replaces it. |
-| `adb devices` shows nothing | Start the emulator: `emulator -avd <name>`, or reconnect the device and accept the USB debugging prompt. |
