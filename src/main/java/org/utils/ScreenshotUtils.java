@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
+import org.api.constants.FrameworkConstants;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.TakesScreenshot;
 import org.openqa.selenium.WebDriver;
@@ -24,17 +25,8 @@ import org.openqa.selenium.WebDriver;
 @Slf4j
 public final class ScreenshotUtils {
 
-    /** Kept under target/ so `mvn clean` wipes it. */
-    private static final String SCREENSHOT_DIRECTORY = "target/screenshots";
-
     private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS");
 
-    /**
-     * A timestamp alone is not unique under parallel execution: two threads failing inside the
-     * same millisecond would write to the same file and one would silently overwrite the other.
-     * Thread id plus a monotonic counter makes the name collision-proof regardless of clock
-     * resolution or thread reuse.
-     */
     private static final AtomicInteger SEQUENCE = new AtomicInteger(0);
 
     private ScreenshotUtils() {
@@ -78,7 +70,7 @@ public final class ScreenshotUtils {
 
     private static void writeToDisk(String contextName, byte[] screenshot) {
         try {
-            Path directory = Paths.get(SCREENSHOT_DIRECTORY);
+            Path directory = Paths.get(FrameworkConstants.SCREENSHOT_DIRECTORY);
             Files.createDirectories(directory);
 
             Path target = directory.resolve(uniqueFileName(contextName));

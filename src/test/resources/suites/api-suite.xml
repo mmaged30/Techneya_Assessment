@@ -17,8 +17,8 @@
 <suite name="API Suite" configfailurepolicy="continue">
 
     <listeners>
-        <listener class-name="org.Listeners.AllureEnvironmentWriter"/>
-        <listener class-name="org.Listeners.FailureListener"/>
+        <listener class-name="org.listeners.AllureEnvironmentWriter"/>
+        <listener class-name="org.listeners.TestExecutionListener"/>
     </listeners>
 
     <test name="Postal code API" parallel="methods" thread-count="4">

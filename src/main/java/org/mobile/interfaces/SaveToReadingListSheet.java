@@ -1,11 +1,8 @@
 package org.mobile.interfaces;
 
 /**
- * Choosing where an article is filed: an existing list, or a new one.
- * <p>
- * The sheet and the create-list dialog are modelled together because they are one decision from
- * the user's side, and splitting them would produce a screen object whose only job is to
- * forward a name to a text field.
+ * Handles target list selection and inline creation dialogs for saving articles.
+ * Models both components together to simplify the article-saving flow without single-purpose wrappers.
  */
 public interface SaveToReadingListSheet {
 

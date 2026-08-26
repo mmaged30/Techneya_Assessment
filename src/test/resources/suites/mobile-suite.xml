@@ -14,8 +14,8 @@
 <suite name="Mobile Suite" configfailurepolicy="continue">
 
     <listeners>
-        <listener class-name="org.Listeners.AllureEnvironmentWriter"/>
-        <listener class-name="org.Listeners.FailureListener"/>
+        <listener class-name="org.listeners.AllureEnvironmentWriter"/>
+        <listener class-name="org.listeners.TestExecutionListener"/>
     </listeners>
 
     <test name="Wikipedia reading lists">

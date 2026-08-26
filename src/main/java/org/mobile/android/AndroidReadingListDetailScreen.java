@@ -6,10 +6,8 @@ import org.mobile.interfaces.ReadingListDetailScreen;
 import org.openqa.selenium.By;
 
 /**
- * One reading list and the articles in it.
- * <p>
- * Article rows are the only nodes carrying {@code page_list_item_title}, so counting them is
- * how this screen answers both "is the article here" and "is it here exactly once".
+ * Represents a reading list and its contained articles.
+ * Uses {@code page_list_item_title} nodes to count article rows and verify presence and uniqueness.
  */
 @Slf4j
 public class AndroidReadingListDetailScreen extends AndroidScreenBase implements ReadingListDetailScreen {
@@ -24,9 +22,9 @@ public class AndroidReadingListDetailScreen extends AndroidScreenBase implements
     private static final By sheetTitle = id("reading_list_item_title");
 
     /**
-     * Opening a list is where the app shows its share tooltip, and that tooltip is its own
-     * window: while it is up the list beneath it is not in the hierarchy at all. Waiting past
-     * promotions rather than waiting and then clearing them is what handles that.
+     * Handles the share tooltip window that covers the reading list.
+     * Waits out overlay animations directly so the underlying list re-enters
+     * the view hierarchy before interaction.
      */
     AndroidReadingListDetailScreen awaitLoaded() {
         awaitPastPromos(listRecycler, "reading list contents");
@@ -68,9 +66,8 @@ public class AndroidReadingListDetailScreen extends AndroidScreenBase implements
     }
 
     /**
-     * The remove option sits below the fold of the action sheet, and the rows underneath it are
-     * not merely off-screen but absent from the hierarchy until the sheet is expanded. So the
-     * sheet is dragged up once, and only when the option is not already reachable.
+     * Ensures the "Remove" action sheet option is visible before selection.
+     * Expands the sheet via drag if the option is not yet rendered in the view hierarchy.
      */
     private void revealRemoveOption() {
         if (isDisplayed(removeRow)) {

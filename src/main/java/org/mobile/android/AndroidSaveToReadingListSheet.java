@@ -7,10 +7,8 @@ import org.mobile.interfaces.SaveToReadingListSheet;
 import org.openqa.selenium.By;
 
 /**
- * The "Save to reading list" bottom sheet, and the create-list dialog it leads to.
- * <p>
- * Note that the sheet offers every list, including ones that already contain the article. The
- * app does not filter them out; it detects the duplicate after the choice is made.
+ * Bottom sheet and dialog for saving articles to reading lists.
+ * Lists are not pre-filtered; duplicate additions are handled post-selection by the app.
  */
 @Slf4j
 public class AndroidSaveToReadingListSheet extends AndroidScreenBase implements SaveToReadingListSheet {

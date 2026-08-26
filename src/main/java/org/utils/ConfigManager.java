@@ -6,38 +6,17 @@ import java.io.InputStream;
 import java.time.Duration;
 import java.util.Properties;
 import lombok.extern.slf4j.Slf4j;
+import org.api.constants.FrameworkConstants;
 
 /**
- * The single gateway to every configurable value.
- * <p>
- * Resolution order, highest first:
- * <ol>
- *     <li>{@code -Dkey=value} on the command line</li>
- *     <li>the platform overlay, e.g. {@code config/android.properties}</li>
- *     <li>{@code config/global.properties}</li>
- * </ol>
- * The overlay exists so a mobile capability lives with the platform it belongs to instead of
- * being prefixed into one flat file - and so adding iOS is a new file, not an edit to an
- * existing one. It is optional: an API-only run never needs it.
+ * Central gateway for configurable values.
+ * Resolution order: system property → platform config → global config.
+ * Platform-specific settings are kept in separate optional overlay files.
  */
 @Slf4j
 public final class ConfigManager {
 
-    /** Classpath-relative, under src/test/resources. */
-    private static final String BASE_CONFIG_FILE = "config/global.properties";
 
-    /**
-     * Per-platform overlay, resolved from the {@code platform} key. Loaded on top of the base
-     * file so a mobile-only value never has to be duplicated for the platform that ignores it.
-     */
-    private static final String PLATFORM_CONFIG_TEMPLATE = "config/%s.properties";
-
-    /**
-     * Per-target overlay, resolved from the {@code execution.target} key. Loaded on top of the
-     * platform file so a remote grid's device defaults win over a local emulator's, while a
-     * {@code -D} flag still beats both.
-     */
-    private static final String TARGET_CONFIG_TEMPLATE = "config/%s.properties";
 
     private static final Properties masterProperties = new Properties();
 
@@ -103,13 +82,12 @@ public final class ConfigManager {
      * exists but cannot be read is, because that is a broken setup rather than an absent one.
      */
     private static void loadPlatformOverlay() {
-        // resolveRaw, not resolve: this runs inside ensureLoaded and must not re-enter it.
         String platform = resolveRaw("platform");
         if (platform == null || platform.isBlank()) {
             return;
         }
 
-        String resource = String.format(PLATFORM_CONFIG_TEMPLATE,
+        String resource = String.format(FrameworkConstants.PLATFORM_CONFIG_TEMPLATE,
                 platform.trim().toLowerCase());
 
         try (InputStream stream = open(resource)) {
@@ -124,43 +102,14 @@ public final class ConfigManager {
         }
     }
 
-    /**
-     * Absent for a local run - there is nothing a local Appium server needs that
-     * global.properties does not already hold - and required for any remote target, because a
-     * missing hub URL there is a broken setup rather than an absent one.
-     */
-    private static void loadTargetOverlay() {
-        String target = resolveRaw("execution.target");
-        if (target == null || target.isBlank() || "local".equalsIgnoreCase(target.trim())) {
-            return;
-        }
-
-        String resource = String.format(TARGET_CONFIG_TEMPLATE, target.trim().toLowerCase());
-
-        try (InputStream stream = open(resource)) {
-            if (stream == null) {
-                throw new IllegalStateException("❌ CRITICAL: execution.target is set to '" + target
-                        + "' but '" + resource + "' does not exist on the classpath.");
-            }
-            masterProperties.load(stream);
-            log.info("🚀 Target configuration loaded from [{}]", resource);
-        } catch (IOException e) {
-            throw new IllegalStateException("❌ FATAL: Failed to read the target configuration: "
-                    + resource, e);
-        }
-    }
-
     private static InputStream open(String resource) {
         return ConfigManager.class.getClassLoader().getResourceAsStream(resource);
     }
 
     /**
-     * Loads on first use rather than in a static initialiser.
-     * <p>
-     * A static initialiser that throws produces {@code ExceptionInInitializerError} once and
-     * {@code NoClassDefFoundError} - with the original cause gone - on every access after it.
-     * A missing configuration file is a routine setup mistake and deserves to say so every
-     * time it is hit, not only the first.
+     * Lazy-loads configuration on first use rather than inside a static initializer.
+     * Prevents initialization errors from masking underlying configuration failures
+     * under generic {@code NoClassDefFoundError} exceptions on subsequent access.
      */
     private static void ensureLoaded() {
         if (loaded) {
@@ -170,9 +119,8 @@ public final class ConfigManager {
             if (loaded) {
                 return;
             }
-            loadRequired(BASE_CONFIG_FILE);
+            loadRequired(FrameworkConstants.BASE_CONFIG_FILE);
             loadPlatformOverlay();
-            loadTargetOverlay();
             loaded = true;
         }
     }

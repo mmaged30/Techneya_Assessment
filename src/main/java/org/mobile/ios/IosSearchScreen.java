@@ -7,22 +7,9 @@ import org.mobile.interfaces.SearchScreen;
 import org.openqa.selenium.By;
 
 /**
- * Reference implementation: what an iOS screen in this framework looks like.
- * <p>
- * <strong>UNVERIFIED, AND NOT YET REACHABLE AT RUNTIME.</strong> This class exists as the
- * worked template for whoever completes iOS on a macOS machine. Two things are true about it:
- * <ul>
- *     <li>the <em>structure</em> is real - it extends {@link IosScreenBase}, implements the same
- *         {@link SearchScreen} interface the Android screen does, returns interfaces rather than
- *         concrete types, and keeps its locators private and static, exactly as its Android
- *         counterpart does;</li>
- *     <li>the <em>identifiers</em> below are placeholders. They were not read from a running
- *         app, because no such app could be run here. Every one of them must be replaced by
- *         inspecting the real iOS build with Appium Inspector.</li>
- * </ul>
- * Nothing constructs this class yet: there is no {@code IosMainScreen} to navigate from. That
- * is deliberate - resolving half a flow would fail deep inside a scenario instead of at the
- * boundary, with a message about a missing element rather than a missing implementation.
+ * Reference implementation and template for iOS screen objects, extending {@link IosScreenBase}.
+ * Defines architecture and implements {@link SearchScreen}, but contains placeholder locators
+ * and is withheld from runtime instantiation pending live iOS inspection.
  */
 @Slf4j
 public class IosSearchScreen extends IosScreenBase implements SearchScreen {
@@ -60,9 +47,8 @@ public class IosSearchScreen extends IosScreenBase implements SearchScreen {
     }
 
     /**
-     * The iOS counterpart of matching a Compose row by its text: a predicate on the cell's
-     * label. Scoped by element type for the same reason the Android locator pins a class - so
-     * the search field, which also holds the typed term, cannot win the match.
+     * Matches result rows by text label using element-type predicates on iOS.
+     * Scopes locators by cell type to prevent false-positive matches against the search input field.
      */
     private static By resultAt(String articleTitle) {
         return staticTextWithLabel(articleTitle);

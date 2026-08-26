@@ -1,8 +1,8 @@
 package org.utils;
 
 import java.time.Duration;
-import java.util.function.Function;
 import org.openqa.selenium.By;
+import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.ExpectedConditions;
@@ -10,10 +10,7 @@ import org.openqa.selenium.support.ui.WebDriverWait;
 
 /**
  * The only place a {@code WebDriverWait} is built, so {@code timeout.explicit} is read in
- * one spot and no screen object invents its own wait - or a {@code Thread.sleep}.
- * <p>
- * Driver-agnostic on purpose: {@code AppiumDriver} implements {@link WebDriver}, so the same
- * conditions serve a mobile session unchanged.
+ * one spot and no page object invents its own wait - or a {@code Thread.sleep}.
  */
 public class Waits {
 
@@ -30,6 +27,9 @@ public class Waits {
         );
     }
 
+    public WebDriverWait getDriverWait() {
+        return this.wait;
+    }
     /** Element is rendered and has a non-zero size. */
     public WebElement visible(By locator) {
         return wait.until(ExpectedConditions.visibilityOfElementLocated(locator));
@@ -46,28 +46,25 @@ public class Waits {
     }
 
     /**
-     * Waits until the number of matches settles on {@code expected} and returns whether it did.
-     * <p>
-     * This is the condition a duplicate check needs: asserting a count immediately after an
-     * action races the list's own re-render, so "count == 1" could pass on a list that has not
-     * finished adding the second entry yet. Waiting for the count makes the assertion honest
-     * in both directions - it gives the app the full timeout to produce a duplicate before
-     * concluding that none appeared.
+     * Polls until element match count stabilizes at {@code expected} within the active timeout.
+     * Prevents race conditions against list re-renders by verifying the UI count has settled
+     * before asserting, ensuring accurate validation for dynamic elements like duplicates.
+     * @param expected total expected element count to wait for
+     * @return {@code true} if match count reaches {@code expected} before timeout; {@code false} otherwise
      */
     public boolean countSettlesAt(By locator, int expected) {
         try {
             return wait.until(ExpectedConditions.numberOfElementsToBe(locator, expected)) != null;
-        } catch (org.openqa.selenium.TimeoutException e) {
+        } catch (TimeoutException e) {
             return false;
         }
     }
 
     /**
-     * Waits for an element and reports whether it arrived, instead of throwing.
-     * <p>
-     * For assertions that need to distinguish "not there" from "not there yet". A plain
-     * presence check would answer immediately and so could report a result list as empty purely
-     * because the request behind it had not come back.
+     * Polls for element presence within the configured timeout, returning a boolean status instead of throwing.
+     * Distinguishes true absence ("not there") from initial loading delays ("not there yet"),
+     * preventing false-negative checks on asynchronous or network-dependent UI state.
+     * @return {@code true} if the element becomes visible before timeout; {@code false} otherwise
      */
     public boolean appears(By locator) {
         try {
@@ -75,28 +72,6 @@ public class Waits {
             return true;
         } catch (org.openqa.selenium.TimeoutException e) {
             return false;
-        }
-    }
-
-    /**
-     * Waits on a caller-supplied condition, using the framework's single timeout and polling
-     * interval. Exists so a screen that needs something these methods do not express still does
-     * not build a {@code WebDriverWait} of its own.
-     * <p>
-     * The description is required rather than optional: a lambda has no readable name, so
-     * without one a timeout reports the condition as {@code Lambda$$0x00007f...} and tells
-     * whoever reads the failure nothing at all.
-     * <p>
-     * The description is attached by rethrowing rather than through {@code withMessage}, which
-     * mutates the wait it is called on. Sharing one wait per screen, that leaks: the message set
-     * here would still be attached to every later timeout on the same screen, so an unrelated
-     * failure would be reported under this description and send the reader to the wrong place.
-     */
-    public <T> T until(String description, Function<WebDriver, T> condition) {
-        try {
-            return wait.until(condition);
-        } catch (org.openqa.selenium.TimeoutException e) {
-            throw new org.openqa.selenium.TimeoutException("Timed out waiting for " + description, e);
         }
     }
 

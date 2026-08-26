@@ -7,23 +7,14 @@ import org.mobile.interfaces.ReadingListDetailScreen;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
-/**
- * Saving articles into named reading lists, and what the app does with duplicates.
- * <p>
- * Each test gets its own app session with cleared data, so a list created here is never visible
- * to the next test. That is why nothing cleans up after itself: the isolation is a property of
- * the session, not of a teardown step that could itself fail.
- * <p>
- * Neither test is data-driven, deliberately. They exercise one behaviour each, and repeating
- * them with a different list name would add runtime rather than coverage.
- */
+
 public class ReadingListTest extends BaseMobileTest {
 
     private static final String ARTICLE_SEARCH_TERM = "Artificial Intelligence";
     private static final String ARTICLE_TITLE = "Artificial intelligence";
     private static final String LIST_NAME = "AI Research";
 
-    @Test(groups = {"mobile", "smoke"})
+    @Test(groups = {"mobile"})
     @Description("An article saved to a new reading list can be found there and removed")
     public void articleSavedToANewListCanBeFoundThereAndRemoved() {
         MainScreen main = launchApp();
@@ -53,13 +44,7 @@ public class ReadingListTest extends BaseMobileTest {
                 "The reading list still shows articles after its last one was removed.");
     }
 
-    /**
-     * Duplicate prevention is verified two independent ways, because the app handles it in a way
-     * worth pinning down. Adding an article to a list that already holds it is not blocked in
-     * the UI - the list is still offered in the chooser - and the app instead detects the
-     * duplicate after the choice and answers with a snackbar. So this asserts both that message
-     * and that the list still holds exactly one copy, waited on rather than sampled.
-     */
+
     @Test(groups = {"mobile"})
     @Description("Saving the same article twice leaves only one copy in the list")
     public void savingTheSameArticleTwiceLeavesOnlyOneCopy() {

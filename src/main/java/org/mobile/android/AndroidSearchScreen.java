@@ -6,13 +6,7 @@ import org.mobile.interfaces.ArticleScreen;
 import org.mobile.interfaces.SearchScreen;
 import org.openqa.selenium.By;
 
-/**
- * Search: a card on the Search tab that opens a dedicated search activity.
- * <p>
- * The results list is rendered with Jetpack Compose and carries no resource ids at all, so its
- * rows can only be addressed by their text. The locator is scoped by class so a query that
- * happens to equal a result's title cannot match the input field instead.
- */
+/** Page object for the Search card and activity.*/
 @Slf4j
 public class AndroidSearchScreen extends AndroidScreenBase implements SearchScreen {
 
@@ -21,10 +15,8 @@ public class AndroidSearchScreen extends AndroidScreenBase implements SearchScre
     private static final By resultsContainer = id("fragment_search_results");
 
     /**
-     * The search-widget advert is modal: while it is showing, the search card is not merely
-     * covered but absent from the view hierarchy. It also does not always arrive before the tab
-     * beneath it has rendered, so the advert is cleared from inside the wait rather than once
-     * before it.
+     * Clears search-widget ad overlays dynamically within waits
+     * to handle delayed modal arrivals.
      */
     AndroidSearchScreen awaitLoaded() {
         awaitPastPromos(searchCard, "Search card");
@@ -39,10 +31,6 @@ public class AndroidSearchScreen extends AndroidScreenBase implements SearchScre
         return this;
     }
 
-    /**
-     * Waits for the result rather than asking whether it is there yet: results arrive over the
-     * network, so an immediate check would report an empty list as "no such article".
-     */
     @Override
     @Step("Check whether the results include '{0}'")
     public boolean resultsInclude(String articleTitle) {
@@ -57,16 +45,8 @@ public class AndroidSearchScreen extends AndroidScreenBase implements SearchScre
         return new AndroidArticleScreen().awaitLoaded();
     }
 
-    /**
-     * Matches a result row by its exact title.
-     * <p>
-     * The class is part of the match, not decoration: the search field holds the typed term and
-     * would otherwise match a row whose title is spelled the same way - and being higher up the
-     * tree, it would win. It is an {@code AutoCompleteTextView}, so pinning the class to
-     * {@code TextView} excludes it.
-     * <p>
-     * The matched node is the title itself, which Compose renders as non-clickable. Tapping it
-     * still works, because the tap lands at its centre - inside the clickable row that wraps it.
+    /** Matches result rows by exact title (scoped to {@code TextView}
+     *  to avoid search field false-positives).
      */
     private static By resultAt(String articleTitle) {
         return uiSelector(

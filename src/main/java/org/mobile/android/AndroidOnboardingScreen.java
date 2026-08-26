@@ -10,11 +10,9 @@ import org.openqa.selenium.By;
 import org.openqa.selenium.WebElement;
 
 /**
- * The first-run flow: a logged-out prompt, then a four-page introduction ending in a Skip.
- * <p>
- * Only reached because every scenario clears app data to stay independent of the others. The
- * whole flow is treated as optional, so the same code works whether or not the app decides to
- * show it - which it does not always do when data was already clear.
+ * Handles the optional first-run introductory flow.
+ * Safely bypassed or completed depending on whether the app triggers it
+ * after the test suite clears user data.
  */
 @Slf4j
 public class AndroidOnboardingScreen extends AndroidScreenBase implements OnboardingScreen {
@@ -30,8 +28,8 @@ public class AndroidOnboardingScreen extends AndroidScreenBase implements Onboar
     private static final By mainNavigation = id("main_nav_tab_container");
 
     /**
-     * Bounded rather than open-ended: the introduction is four pages, and a loop that could run
-     * forever would turn a changed flow into a hung suite instead of a readable failure.
+     * Limits onboarding navigation iterations to avoid infinite loops and hung suites
+     * if the introduction flow changes.
      */
     private static final int MAX_ONBOARDING_PAGES = 8;
 

@@ -6,14 +6,10 @@ import org.mobile.interfaces.OnboardingScreen;
 import org.utils.ConfigManager;
 
 /**
- * The one place a platform decides which screen implementations a run uses.
- * <p>
- * Only the entry point needs resolving. Once a test holds a screen, every later screen is
- * produced by the one it navigates from - an Android screen builds Android screens and returns
- * them as interfaces - so this stays a single method rather than a catalogue of every screen.
- * <p>
- * The switch is exhaustive over {@link Platform}: adding a platform will not compile until it is
- * handled here, which fails earlier and more loudly than a registry that returns null at runtime.
+ * Factory method resolving platform-specific initial screen implementations.
+ * Factory-instantiates only entry-point screens; subsequent screens are returned directly
+ * as interfaces by navigation methods. Exhaustively checks {@link Platform} to enforce
+ * compile-time safety.
  */
 public final class Screens {
 

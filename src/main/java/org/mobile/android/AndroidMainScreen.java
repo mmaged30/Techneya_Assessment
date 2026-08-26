@@ -23,10 +23,9 @@ public class AndroidMainScreen extends AndroidScreenBase implements MainScreen {
     public AndroidMainScreen returnHere() {
         restartApp();
 
-        // Arrival is judged by the bottom navigation, not by the activity name: launching the
-        // app goes through its launcher alias, so the activity on top afterwards is reported
-        // under the alias rather than as MainActivity. The navigation bar is what actually
-        // defines this screen, and it is what the next step needs to be there anyway.
+        // Synchronizes screen readiness via bottom navigation rather than activity name.
+        // App launcher aliases obfuscate the top activity (e.g., MainActivity), whereas
+        // bottom navigation reliably confirms arrival for subsequent steps.
         awaitPastPromos(bottomNavigation, "bottom navigation");
         return this;
     }

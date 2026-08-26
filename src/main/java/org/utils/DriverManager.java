@@ -3,17 +3,6 @@ package org.utils;
 import lombok.extern.slf4j.Slf4j;
 import org.openqa.selenium.WebDriver;
 
-/**
- * Provides one driver per thread for safe parallel execution.
- * <p>
- * Typed as {@link WebDriver} rather than {@code AppiumDriver} deliberately: {@code AppiumDriver}
- * implements {@code WebDriver}, so this one holder serves a mobile session today and could hold
- * a browser session tomorrow without a second, near-identical class. Everything that only needs
- * to <em>use</em> a driver - {@link Waits}, {@link ScreenshotUtils} - therefore
- * stays platform-agnostic.
- * <p>
- * Hooks own the lifecycle; everything else only calls {@link #getDriver()}.
- */
 @Slf4j
 public final class DriverManager {
 

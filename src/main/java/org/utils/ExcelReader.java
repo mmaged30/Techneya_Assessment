@@ -2,29 +2,27 @@ package org.utils;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.utils.CustomAnnotations.ExcelColumn;
 
 /**
- * Reads a sheet of an {@code .xlsx} workbook into rows a TestNG {@code @DataProvider} can feed
- * straight to a test.
- * <p>
- * Rows are keyed by the header cell above them rather than by position, so a test reads
- * {@code row.get("postalCode")} and stays correct when someone reorders or inserts a column.
- * <p>
- * Every value is read as text through {@link DataFormatter}. Postal codes are the reason: Excel
- * stores {@code 01067} as the number 1067 and would drop the leading zero, and a cell typed as
- * numeric would otherwise arrive as {@code 90210.0}. The API takes strings, so text is both
- * safer and closer to what is actually sent.
+ * Maps Excel sheet rows to typed objects using {@link ExcelColumn}.
+ * Columns are matched by header name to prevent issues when columns are reordered.
+ * Cells are read as text and converted to the declared field type.
  */
+@Slf4j
 public final class ExcelReader {
 
     private ExcelReader() {
@@ -32,15 +30,13 @@ public final class ExcelReader {
     }
 
     /**
+     * @param rowType   the type each row is mapped onto; needs a no-argument constructor
      * @param resource  classpath-relative workbook, e.g. {@code data/api-data.xlsx}
-     * @param sheetName the sheet to read; its first row is treated as the header
-     * @return one map per data row, in sheet order
+     * @param sheetName the sheet to read; its first row is the header
+     * @return one instance of {@code rowType} per data row, in sheet order
      */
-    public static List<Map<String, String>> rows(String resource, String sheetName) {
-        // Created per read rather than shared in a static field: DataFormatter caches parsed
-        // formats in a plain HashMap and carries mutable locale state, so one instance shared
-        // between concurrently-invoked data providers would be a race. Constructing one per
-        // sheet costs nothing next to opening the workbook.
+    public static List<Object> rows(Class<?> rowType, String resource, String sheetName) {
+        // Created per read to avoid sharing DataFormatter's mutable state across threads.
         DataFormatter formatter = new DataFormatter();
 
         try (InputStream stream = open(resource);
@@ -59,22 +55,26 @@ public final class ExcelReader {
                         + resource + "' is empty - the first row must be a header.");
             }
 
-            List<String> columns = readHeader(header, formatter);
-            List<Map<String, String>> rows = new ArrayList<>();
+            Map<String, Integer> columns = headerIndex(header, formatter);
+            List<Field> fields = boundFieldsOf(rowType, columns, sheetName, resource);
 
+            List<Object> rows = new ArrayList<>();
             for (int i = header.getRowNum() + 1; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
                 if (isBlank(row, columns.size(), formatter)) {
                     // A trailing blank row is how a spreadsheet ends, not a data row.
                     continue;
                 }
-                rows.add(readRow(row, columns, formatter));
+                rows.add(toRowObject(rowType, fields, columns, row, formatter));
             }
 
             if (rows.isEmpty()) {
                 throw new IllegalStateException("❌ CRITICAL: sheet '" + sheetName + "' in '"
                         + resource + "' has a header but no data rows.");
             }
+
+            log.info("Loaded {} row(s) from [{}!{}] as {}",
+                    rows.size(), resource, sheetName, rowType.getSimpleName());
             return rows;
 
         } catch (IOException e) {
@@ -82,37 +82,97 @@ public final class ExcelReader {
         }
     }
 
-    /**
-     * The same rows shaped for a {@code @DataProvider}: one map per test invocation.
-     * <p>
-     * Each row is a single argument rather than one argument per column, so a seven-column data
-     * set does not become a seven-parameter test method whose call site nobody can read.
-     */
-    public static Object[][] dataProvider(String resource, String sheetName) {
-        return rows(resource, sheetName).stream()
-                .map(row -> new Object[]{row})
-                .toArray(Object[][]::new);
-    }
-
-    private static List<String> readHeader(Row header, DataFormatter formatter) {
-        List<String> columns = new ArrayList<>();
+    /** Header name to column index. Linked so a failure message lists them in sheet order. */
+    private static Map<String, Integer> headerIndex(Row header, DataFormatter formatter) {
+        Map<String, Integer> columns = new LinkedHashMap<>();
         for (int c = 0; c < header.getLastCellNum(); c++) {
-            columns.add(text(header.getCell(c), formatter));
+            String name = text(header.getCell(c), formatter);
+            if (!name.isEmpty()) {
+                columns.put(name, c);
+            }
         }
         return columns;
     }
 
-    private static Map<String, String> readRow(Row row, List<String> columns,
-                                               DataFormatter formatter) {
-        // Linked so the map iterates in column order, which makes a failure message readable.
-        Map<String, String> values = new LinkedHashMap<>();
-        for (int c = 0; c < columns.size(); c++) {
-            String column = columns.get(c);
-            if (!column.isEmpty()) {
-                values.put(column, text(row.getCell(c), formatter));
-            }
+    /**
+     * Annotated fields validated against the sheet headers before processing rows.
+     * Fails fast on missing or misspelled column names.
+     */
+    private static List<Field> boundFieldsOf(Class<?> rowType, Map<String, Integer> columns,
+                                             String sheetName, String resource) {
+        List<Field> fields = Arrays.stream(rowType.getDeclaredFields())
+                .filter(field -> field.isAnnotationPresent(ExcelColumn.class))
+                .toList();
+
+        if (fields.isEmpty()) {
+            throw new IllegalStateException("❌ CRITICAL: " + rowType.getSimpleName()
+                    + " has no @ExcelColumn fields, so no row could be mapped onto it.");
         }
-        return values;
+
+        List<String> missing = fields.stream()
+                .map(field -> field.getAnnotation(ExcelColumn.class).value())
+                .filter(name -> !columns.containsKey(name))
+                .toList();
+
+        if (!missing.isEmpty()) {
+            throw new IllegalStateException("❌ CRITICAL: " + rowType.getSimpleName()
+                    + " expects column(s) " + missing + " but sheet '" + sheetName + "' in '"
+                    + resource + "' has " + columns.keySet());
+        }
+        return fields;
+    }
+
+    /** A fresh instance per row, so two rows can never overwrite one object. */
+    private static Object toRowObject(Class<?> rowType, List<Field> fields,
+                                      Map<String, Integer> columns, Row row,
+                                      DataFormatter formatter) {
+        try {
+            Object instance = rowType.getDeclaredConstructor().newInstance();
+            for (Field field : fields) {
+                int columnIndex = columns.get(field.getAnnotation(ExcelColumn.class).value());
+                field.setAccessible(true);
+                field.set(instance, valueAs(field, text(row.getCell(columnIndex), formatter)));
+            }
+            return instance;
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("❌ CRITICAL: could not map row " + (row.getRowNum() + 1)
+                    + " onto " + rowType.getSimpleName()
+                    + ". The class needs a no-argument constructor.", e);
+        }
+    }
+
+    /**
+     * Converts cell text to the declared field type.
+     * Supports String, int, and boolean; unsupported types fail explicitly.
+     */
+    private static Object valueAs(Field field, String cellValue) {
+        Class<?> type = field.getType();
+
+        if (type == String.class) {
+            return cellValue;
+        }
+        if (type == int.class || type == Integer.class) {
+            return parseInt(field, cellValue);
+        }
+        if (type == boolean.class || type == Boolean.class) {
+            return Boolean.parseBoolean(cellValue);
+        }
+        throw new IllegalStateException("❌ CRITICAL: @ExcelColumn supports String, int and boolean"
+                + " fields only, but '" + field.getName() + "' is a " + type.getSimpleName());
+    }
+
+    private static int parseInt(Field field, String cellValue) {
+        if (cellValue.isEmpty()) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(cellValue);
+        } catch (NumberFormatException e) {
+            throw new IllegalStateException("❌ CRITICAL: column '"
+                    + field.getAnnotation(ExcelColumn.class).value() + "' feeds '"
+                    + field.getName() + "', which is a whole number, but the cell held '"
+                    + cellValue + "'", e);
+        }
     }
 
     private static boolean isBlank(Row row, int width, DataFormatter formatter) {

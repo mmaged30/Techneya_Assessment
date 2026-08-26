@@ -15,29 +15,22 @@ import org.openqa.selenium.remote.RemoteWebElement;
 import org.utils.ConfigManager;
 
 /**
- * What every Android screen shares: how an element is addressed, how a long press is performed,
- * and which interruptions have to be cleared.
- * <p>
- * Everything portable is inherited from {@link MobileScreen}; what is added here is Android and
- * only Android, which is why it lives in the Android package rather than in a base class an iOS
- * screen would also have to extend.
+ * Base class for Android-specific screen behaviors (element addressing, long presses, interruption handling).
+ * Extends {@link MobileScreen} with Android-only implementations separate from iOS cross-platform logic.
  */
 @Slf4j
 public abstract class AndroidScreenBase extends MobileScreen {
 
     /**
-     * How long a press is held for the app to treat it as a long press. Android's own threshold
-     * is 500 ms; this leaves room above it for a device that is busy.
+     * Long-press duration in milliseconds.
+     * Set above Android's default 500 ms threshold to accommodate slower or busy devices.
      */
     private static final Duration LONG_PRESS_DURATION = Duration.ofMillis(1200);
 
     /**
-     * The promotional overlays a freshly installed Wikipedia build shows.
-     * <p>
-     * Each mobile scenario starts from cleared app data, which is what keeps scenarios
-     * independent - but it also means the app treats every run as a first run and interrupts at
-     * points that are not tied to any one screen. Every entry was observed on the app under
-     * test, not assumed.
+     * Handles app-wide promotional overlays shown after fresh installs.
+     * Cleared test data triggers these first-run interruptions across various screens;
+     * this class handles clearing them dynamically.
      */
     private static final List<By> TRANSIENT_PROMOS = List.of(
             bottomSheetClose(),     // "A Faster way to Search" - the search-widget advert
@@ -48,44 +41,23 @@ public abstract class AndroidScreenBase extends MobileScreen {
 
     // --- Locators ---
 
-    /**
-     * An Android resource id, qualified with the package from configuration rather than
-     * hard-coded, so the same screens work against a debug or beta build of the app.
-     */
     protected static By id(String resourceId) {
         return AppiumBy.id(qualify(resourceId));
     }
-
-    /**
-     * An element identified by both its id and its text - a row of a list, in practice.
-     * <p>
-     * Expressed as a UiSelector rather than an XPath on purpose. XPath makes UiAutomator build
-     * a full snapshot of the accessibility tree on every evaluation, and on a screen whose main
-     * thread is busy - an article's WebView, most of all - that snapshot times out before it can
-     * be produced. A UiSelector is matched by the device without that round trip.
-     */
     protected static By idWithText(String resourceId, String text) {
         return uiSelector("new UiSelector().resourceId(\"" + qualify(resourceId)
                 + "\").text(\"" + text + "\")");
     }
-
-    /** A framework-owned id such as an AlertDialog button, which is never app-scoped. */
     protected static By androidId(String resourceId) {
         return AppiumBy.id("android:id/" + resourceId);
     }
-
     protected static By text(String value) {
         return uiSelector("new UiSelector().text(\"" + value + "\")");
     }
-
     protected static By uiSelector(String expression) {
         return AppiumBy.androidUIAutomator(expression);
     }
 
-    /**
-     * The close control of a promotional bottom sheet, scoped to the sheet rather than matched
-     * on the description alone, so it can never pick up a "Close" belonging to something else.
-     */
     private static By bottomSheetClose() {
         return uiSelector("new UiSelector().resourceId(\"" + qualify("design_bottom_sheet") + "\")"
                 + ".childSelector(new UiSelector().description(\"Close\"))");
@@ -103,13 +75,6 @@ public abstract class AndroidScreenBase extends MobileScreen {
         return ConfigManager.getProperty("app.package");
     }
 
-    /**
-     * Delegated to the driver's own gesture endpoint rather than assembled from W3C pointer
-     * actions. A hand-built sequence expresses the hold as a pause between pointer-down and
-     * pointer-up, and that pause is not always honoured: the emulator collapsed it often enough
-     * that the press arrived as an ordinary tap, which on a list row opens the article instead
-     * of its menu - a failure that looks like a wrong locator and is not one.
-     */
     @Override
     @Step("Long press: {1}")
     protected void longPress(By locator, String elementName) {

@@ -1,35 +1,23 @@
 package tests.api;
 
-import data.TestData;
 import io.qameta.allure.Allure;
 import io.qameta.allure.Description;
 import io.restassured.response.Response;
 import java.util.List;
-import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
-import org.api.enums.Schema;
-import org.api.models.Place;
-import org.api.models.PostalCode;
+import org.models.api.Place;
+import org.models.api.PostalCode;
+import org.models.excel.CountryCasingData;
+import org.models.excel.MissingPathSegmentData;
+import org.models.excel.PostalCodeLookupData;
+import org.models.excel.RejectedLookupData;
 import org.testng.Assert;
 import org.testng.annotations.Test;
+import org.utils.CustomAnnotations.ExcelDataSource;
+import org.utils.DataProviderSource;
+import tests.TestResources;
 
-import static io.restassured.module.jsv.JsonSchemaValidator.matchesJsonSchemaInClasspath;
 
-/**
- * The Zippopotam postal-code endpoint: {@code GET /{country}/{postalCode}}.
- * <p>
- * The service is read-only and unauthenticated, so no test has anything to set up first.
- * <p>
- * Two findings about the service are built into these tests rather than worked around:
- * <ol>
- *     <li><b>There is no error contract.</b> An unknown country, an uncovered country, a
- *         non-existent code and a malformed code all return the same empty {@code {}} with a
- *         404. {@link #lookupIsRejected} asserts that sameness, because it is what a client
- *         actually has to handle.</li>
- *     <li><b>The German dataset returns broken coordinates</b> - see
- *         {@link #reportCoordinateAnomalies}.</li>
- * </ol>
- */
 @Slf4j
 public class PostalCodeLookupTest extends BaseApiTest {
 
@@ -38,27 +26,29 @@ public class PostalCodeLookupTest extends BaseApiTest {
 
     // ---------------------------------------------------------------- positive
 
-    @Test(dataProvider = "knownPostalCodes", dataProviderClass = TestData.class,
-            groups = {"api", "positive", "smoke"})
+    @ExcelDataSource(workbook = TestResources.API_WORKBOOK,
+            sheetName = TestResources.KNOWN_POSTAL_CODES_SHEET,
+            pojoClass = PostalCodeLookupData.class)
+    @Test(dataProvider = "ExcelFeed", dataProviderClass = DataProviderSource.class, groups = {"api"})
     @Description("A known postal code resolves to its place")
-    public void knownPostalCodeResolvesToItsPlace(Map<String, String> row) {
-        Response response = zippopotam.getLocation(row.get("country"), row.get("postalCode"));
+    public void knownPostalCodeResolvesToItsPlace(PostalCodeLookupData data) {
+        Response response = zippopotam.getLocation(data.getCountry(), data.getPostalCode());
         assertSucceeded(response);
 
         PostalCode location = response.as(PostalCode.class);
-        Assert.assertEquals(location.getCountry(), row.get("countryName"),
+        Assert.assertEquals(location.getCountry(), data.getCountryName(),
                 "Unexpected country name.");
-        Assert.assertEquals(location.getCountryAbbreviation(), row.get("abbreviation"),
+        Assert.assertEquals(location.getCountryAbbreviation(), data.getAbbreviation(),
                 "Unexpected country abbreviation.");
 
         // The code the caller sent must come back untouched, or a client cannot correlate it.
-        Assert.assertEquals(location.getPostCode(), row.get("postalCode"),
+        Assert.assertEquals(location.getPostCode(), data.getPostalCode(),
                 "The service echoed back a different postal code than the one requested.");
 
-        assertIncludesPlace(location, row.get("place"), row.get("state"), row.get("stateCode"));
+        assertIncludesPlace(location, data.getPlace(), data.getState(), data.getStateCode());
     }
 
-    @Test(groups = {"api", "positive"})
+    @Test(groups = {"api"})
     @Description("A postal code covering several districts returns every one of them")
     public void postalCodeCoveringSeveralDistrictsReturnsEveryOne() {
         Response response = zippopotam.getLocation("de", "01067");
@@ -79,36 +69,41 @@ public class PostalCodeLookupTest extends BaseApiTest {
         reportCoordinateAnomalies(location);
     }
 
-    @Test(dataProvider = "countryCasing", dataProviderClass = TestData.class,
-            groups = {"api", "positive"})
+    @ExcelDataSource(workbook = TestResources.API_WORKBOOK,
+            sheetName = TestResources.COUNTRY_CASING_SHEET,
+            pojoClass = CountryCasingData.class)
+    @Test(dataProvider = "ExcelFeed", dataProviderClass = DataProviderSource.class, groups = {"api"})
     @Description("The country code is accepted in any casing")
-    public void countryCodeIsAcceptedInAnyCasing(Map<String, String> row) {
-        Response response = zippopotam.getLocation(row.get("country"), "90210");
+    public void countryCodeIsAcceptedInAnyCasing(CountryCasingData data) {
+        Response response = zippopotam.getLocation(data.getCountry(), data.getPostalCode());
         assertSucceeded(response);
 
         PostalCode location = response.as(PostalCode.class);
-        Assert.assertEquals(location.getCountry(), "United States", "Unexpected country name.");
-        Assert.assertEquals(location.getCountryAbbreviation(), "US",
+        Assert.assertEquals(location.getCountry(), data.getExpectedCountryName(),
+                "Unexpected country name.");
+        Assert.assertEquals(location.getCountryAbbreviation(), data.getExpectedAbbreviation(),
                 "Unexpected country abbreviation.");
     }
 
-    @Test(groups = {"api", "contract"})
+    @Test(groups = {"api"})
     @Description("A successful lookup matches the published location structure")
     public void successfulLookupMatchesTheLocationSchema() {
         Response response = zippopotam.getLocation("us", "90210");
         assertSucceeded(response);
-        response.then().body(matchesJsonSchemaInClasspath(Schema.LOCATION.classpathPath()));
+        assertMatchesSchema(response, TestResources.LOCATION_SCHEMA);
     }
 
     // ---------------------------------------------------------------- negative
 
-    @Test(dataProvider = "rejectedLookups", dataProviderClass = TestData.class,
-            groups = {"api", "negative"})
+    @ExcelDataSource(workbook = TestResources.API_WORKBOOK,
+            sheetName = TestResources.REJECTED_LOOKUPS_SHEET,
+            pojoClass = RejectedLookupData.class)
+    @Test(dataProvider = "ExcelFeed", dataProviderClass = DataProviderSource.class, groups = {"api"})
     @Description("A lookup is rejected, and every reason answers identically")
-    public void lookupIsRejected(Map<String, String> row) {
-        log.info("Expecting rejection because the {}", row.get("reason"));
+    public void lookupIsRejected(RejectedLookupData data) {
+        log.info("Expecting rejection because the {}", data.getReason());
 
-        Response response = zippopotam.getLocation(row.get("country"), row.get("postalCode"));
+        Response response = zippopotam.getLocation(data.getCountry(), data.getPostalCode());
         assertRejectedAsNotFound(response);
 
         Assert.assertTrue(response.jsonPath().getMap("$").isEmpty(),
@@ -116,36 +111,30 @@ public class PostalCodeLookupTest extends BaseApiTest {
                         + response.asString());
     }
 
-    @Test(groups = {"api", "negative", "contract"})
+    @Test(groups = {"api"})
     @Description("A rejected lookup still answers as JSON")
     public void rejectedLookupStillAnswersAsJson() {
         Response response = zippopotam.getLocation("us", "99999");
         assertRejectedAsNotFound(response);
-        response.then().body(matchesJsonSchemaInClasspath(Schema.NOT_FOUND.classpathPath()));
+        assertMatchesSchema(response, TestResources.NOT_FOUND_SCHEMA);
     }
 
-    /**
-     * These fall through to the web framework's own error page rather than the API, so the
-     * answer is an HTML document. Worth pinning: a client parsing every 404 as JSON breaks here.
-     */
-    @Test(dataProvider = "missingPathSegments", dataProviderClass = TestData.class,
-            groups = {"api", "negative"})
+    @ExcelDataSource(workbook = TestResources.API_WORKBOOK,
+            sheetName = TestResources.MISSING_PATH_SEGMENTS_SHEET,
+            pojoClass = MissingPathSegmentData.class)
+    @Test(dataProvider = "ExcelFeed", dataProviderClass = DataProviderSource.class, groups = {"api"})
     @Description("A request missing a path segment never reaches the API")
-    public void requestMissingAPathSegmentNeverReachesTheApi(Map<String, String> row) {
-        Response response = zippopotam.getRawPath(row.get("path"));
+    public void requestMissingAPathSegmentNeverReachesTheApi(MissingPathSegmentData data) {
+        Response response = zippopotam.getRawPath(data.getPath());
 
-        Assert.assertEquals(response.statusCode(), 404,
+        Assert.assertEquals(response.statusCode(), data.getExpectedStatus(),
                 "The service answered with an unexpected HTTP status.");
-
-        // Asserts the absence of JSON rather than the presence of HTML: the exact error page is
-        // the web framework's business, but a client unable to parse this 404 as JSON is the
-        // behaviour that would break them.
         String contentType = response.contentType();
         Assert.assertFalse(contentType != null && contentType.contains("json"),
                 "Expected a non-JSON error page, but the response was typed as: " + contentType);
     }
 
-    @Test(groups = {"api", "negative"})
+    @Test(groups = {"api"})
     @Description("The endpoint refuses to be written to")
     public void endpointRefusesToBeWrittenTo() {
         Response response = zippopotam.postLocation("us", "90210");
@@ -187,16 +176,10 @@ public class PostalCodeLookupTest extends BaseApiTest {
     }
 
     /**
-     * Coordinates are asserted to be numeric, but NOT to fall inside the valid latitude and
-     * longitude ranges - a deliberate, documented decision rather than an oversight.
-     * <p>
-     * The German dataset genuinely returns broken values: {@code de/01067} answers with
-     * longitude 51.05 and latitude 14612, which are transposed and out of range. A range
-     * assertion would therefore fail against correct, live service behaviour, and excluding
-     * Germany to make it pass would quietly hide a real data defect.
-     * <p>
-     * The defect is surfaced into the report instead: the test stays green because the API met
-     * its contract, and the bad data is still visible to whoever reads the run.
+     * Asserts coordinate values are numeric without validating geographic range boundaries.
+     * Intentionally permits out-of-bounds coordinates (e.g., transposed values in regional datasets)
+     * to verify API contract compliance without failing tests on upstream data defects,
+     * capturing anomalies in execution reports instead.
      */
     private void reportCoordinateAnomalies(PostalCode location) {
         String quirks = location.getPlaces().stream()

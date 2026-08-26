@@ -3,15 +3,9 @@ package org.utils;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * What this run actually exercised.
- * <p>
- * Exists to invert a dependency. Reporting previously asked the API and mobile layers what they
- * had done - a low-level concern reaching upward into two feature layers, and forcing both to
- * carry a counter that only the report cared about. Now each layer <em>records</em> here and
- * reporting <em>reads</em>, so neither layer knows a report exists.
- * <p>
- * Static because a footprint is genuinely run-scoped: one JVM is one run, and threading an
- * instance through every factory would be ceremony for a value that has exactly one meaning.
+ * Run-scoped registry tracking test execution coverage across API and mobile layers.
+ * Inverts reporting dependencies by allowing feature layers to publish metrics passively
+ * without exposing reporting concerns to business logic.
  */
 public final class ExecutionFootprint {
 

@@ -1,4 +1,4 @@
-package org.Listeners;
+package org.listeners;
 
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -11,20 +11,15 @@ import org.testng.ISuiteListener;
 import org.utils.ConfigManager;
 import org.utils.ExecutionFootprint;
 
+import static org.api.constants.FrameworkConstants.ALLURE_RESULTS_DIRECTORY;
+
 /**
- * Writes the {@code environment.properties} that Allure renders as its Environment table.
- * <p>
- * It runs on suite <em>finish</em> rather than start, so it can report what the run actually
- * touched instead of what the configuration happens to default to: a tag-filtered API run does
- * not claim a device it never opened, and a mobile-only run does not advertise an API it never
- * called. Cucumber tags are not consulted for this - the layers record into
- * {@link ExecutionFootprint} as they work, and this reads it.
+ * Generates {@code environment.properties} for the Allure report on test suite completion.
+ * Reads runtime usage from {@link ExecutionFootprint} instead of static configuration,
+ * ensuring the report accurately reflects only the services and devices actually touched.
  */
 @Slf4j
 public class AllureEnvironmentWriter implements ISuiteListener {
-
-    /** Only a fallback: surefire normally forwards allure.results.directory into the test JVM. */
-    private static final String DEFAULT_RESULTS_DIRECTORY = "target/allure-results";
 
     @Override
     public void onFinish(ISuite suite) {
@@ -59,7 +54,7 @@ public class AllureEnvironmentWriter implements ISuiteListener {
      */
     private void write(Properties environment) throws Exception {
         Path resultsDir = Paths.get(System.getProperty(
-                "allure.results.directory", DEFAULT_RESULTS_DIRECTORY));
+                "allure.results.directory", ALLURE_RESULTS_DIRECTORY));
         Files.createDirectories(resultsDir);
 
         try (OutputStream out = Files.newOutputStream(resultsDir.resolve("environment.properties"))) {

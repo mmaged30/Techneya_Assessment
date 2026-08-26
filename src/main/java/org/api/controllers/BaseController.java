@@ -5,51 +5,48 @@ import io.restassured.RestAssured;
 import io.restassured.builder.RequestSpecBuilder;
 import io.restassured.specification.RequestSpecification;
 import lombok.extern.slf4j.Slf4j;
+import org.api.constants.ApiConstants;
 import org.utils.ConfigManager;
 import org.utils.ExecutionFootprint;
 
 /**
- * How every API client in this framework connects: base URI from configuration, and the Allure
- * filter that attaches each request and response to the report.
- * <p>
- * One instance per scenario, built by Cucumber's dependency injection. That is what makes this
- * safe under parallel execution - two scenarios cannot share an instance they were never both
- * given - and it is why there is no thread-local specification here, and no teardown hook that
- * has to remember to clear one.
- * <p>
- * A base class rather than a collaborator because a client genuinely <em>is</em> one of these,
- * and because the state it holds is instance state. The earlier version of this idea was an
- * all-static class that subclasses extended purely to reach a helper; that bought nothing a
- * static import would not have, which is why it is gone.
+ * Provides the common request setup, including base URI, content type,
+ * Allure logging, and thread-safe request specifications.
+ * Service classes use request() to build their requests.
  */
 @Slf4j
-public abstract class BaseController {
+public class BaseController {
+    // One spec per thread to prevent request configuration from leaking between parallel tests.
+    private static final ThreadLocal<RequestSpecification> threadLocalSpec = new ThreadLocal<>();
+    protected static RequestSpecification getBaseSpec() {
+        if (threadLocalSpec.get() == null) {
+            String baseUri = ConfigManager.getProperty("api.base.uri");
+            log.info("Connecting to Endpoint: {}", baseUri);
+            RequestSpecification spec = new RequestSpecBuilder()
+                    .setBaseUri(baseUri)
+                    .setContentType(ApiConstants.CONTENT_TYPE_JSON)
+                    // Attaches request + response to the Allure step on every call.
+                    .addFilter(new AllureRestAssured())
+                    .build();
+            threadLocalSpec.set(spec);
+        }
+        return threadLocalSpec.get();
+    }
 
-    private final RequestSpecification baseSpec;
-
-    protected BaseController() {
-        String baseUri = ConfigManager.getProperty("api.base.uri");
-        log.info("Connecting to endpoint: {}", baseUri);
-
-        this.baseSpec = new RequestSpecBuilder()
-                .setBaseUri(baseUri)
-                // Attaches the full request and response to the Allure step on every call,
-                // which is the API equivalent of a failure screenshot.
-                .addFilter(new AllureRestAssured())
-                .build();
+    /** Called from BaseTest teardown so a pooled thread never reuses a stale spec. */
+    public static void unloadSpec() {
+        threadLocalSpec.remove();
     }
 
     /**
-     * A request ready to be completed with {@code .when().get(...)}.
+     * Returns a request that can be completed with .when().get(), .queryParam(), etc.
      * <p>
-     * The footprint is recorded here rather than in the constructor, so the report reflects a
-     * request actually being built rather than a client merely being instantiated.
-     * <p>
-     * No default content type is set: these calls carry no body, and sending a Content-Type on
-     * a bodyless request would describe something that does not exist.
+     * The footprint is recorded here rather than in getBaseSpec() so it reflects a request
+     * actually being built, not a spec merely being cached for the thread. AllureEnvironmentWriter
+     * reads it to decide whether the run touched the API at all.
      */
-    protected RequestSpecification request() {
+    protected static RequestSpecification request() {
         ExecutionFootprint.recordApiExercised();
-        return RestAssured.given().spec(baseSpec);
+        return RestAssured.given().spec(getBaseSpec());
     }
 }

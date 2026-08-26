@@ -7,10 +7,7 @@ import io.qameta.allure.Step;
 import java.time.Duration;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
-import org.openqa.selenium.By;
-import org.openqa.selenium.Dimension;
-import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.WebElement;
+import org.openqa.selenium.*;
 import org.openqa.selenium.interactions.PointerInput;
 import org.openqa.selenium.interactions.Sequence;
 import org.openqa.selenium.remote.RemoteWebDriver;
@@ -18,18 +15,9 @@ import org.utils.DriverManager;
 import org.utils.Waits;
 
 /**
- * What every screen can do on every platform: find, tap, type, swipe, wait, restart.
- * <p>
- * Only genuinely portable behaviour lives here. The two things that are not portable are
- * declared abstract rather than branched on - the platform base class supplies them:
- * <ul>
- *     <li>{@link #longPress} - Android and iOS expose different driver gestures;</li>
- *     <li>{@link #dismissTransientPromos} - the interruptions are per-platform and per-app;</li>
- *     <li>{@link #appId} - a package name on Android, a bundle id on iOS.</li>
- * </ul>
- * That is a template method rather than a {@code Gestures} collaborator on purpose: exactly one
- * interaction differs, and an interface plus two implementations to carry a single method would
- * be more machinery than the difference is worth.
+ * Cross-platform base class for core screen actions (find, tap, type, swipe, wait, restart).
+ * Exposes template methods for platform-specific behaviors ({@link #longPress},
+ * {@link #dismissTransientPromos}, and {@link #appId}) implemented by platform subclasses.
  */
 @Slf4j
 public abstract class MobileScreen {
@@ -47,7 +35,7 @@ public abstract class MobileScreen {
 
     // --- Locators that mean the same thing on both platforms ---
 
-    /** Accessibility id: {@code content-desc} on Android, the accessibility identifier on iOS. */
+    /** Cross-platform locator using {@code content-desc} on Android and accessibility identifier on iOS.*/
     protected static By accessibilityId(String value) {
         return AppiumBy.accessibilityId(value);
     }
@@ -69,11 +57,8 @@ public abstract class MobileScreen {
     }
 
     /**
-     * An immediate presence check, deliberately without a wait - it answers "is this on screen
-     * now", which is what an optional-flow decision needs.
-     * <p>
-     * Not an Allure step: it is called repeatedly inside loops, and recording each call buries
-     * the steps that matter under dozens of empty ones.
+     * Immediate presence check without waiting, used for optional flow decisions.
+     * Excluded from Allure reporting to avoid cluttering test logs during polling loops.
      */
     protected boolean isDisplayed(By locator) {
         return !driver.findElements(locator).isEmpty();
@@ -105,11 +90,8 @@ public abstract class MobileScreen {
     }
 
     /**
-     * A press-and-hold. Android and iOS reach this through different driver gestures, so the
-     * platform base supplies it.
-     * <p>
-     * The hold duration is the gesture's own definition, not a wait for the app to catch up:
-     * a press too short is a tap, and on a list row that opens the article instead of its menu.
+     * Performs a press-and-hold action implemented by platform subclasses.
+     * Enforces a strict hold duration to prevent the gesture from registering as a standard tap.
      */
     protected abstract void longPress(By locator, String elementName);
 
@@ -119,17 +101,8 @@ public abstract class MobileScreen {
     protected abstract String appId();
 
     /**
-     * Restarts the app.
-     * <p>
-     * Deliberately not done by pressing back. Each part of the app runs in its own activity or
-     * view controller, so the number of presses varies with the route taken, and the presses are
-     * not uniform either - back on a search screen may only close the keyboard, while back on
-     * the main screen leaves the app altogether. Counting presses therefore either stops short
-     * or walks out to the launcher, and both were observed before this replaced it.
-     * <p>
-     * Restarting is deterministic in one step and models something a user genuinely does. It
-     * costs nothing in coverage: reading lists live in the app's database, so a list created
-     * before the restart is still there afterwards - which this incidentally proves.
+     * Restarts the app deterministically rather than navigating back via keypresses.
+     * Avoids route-dependent back-button counts while confirming app data persistence (e.g., reading lists).
      */
     protected void restartApp() {
         InteractsWithApps app = (InteractsWithApps) driver;
@@ -141,20 +114,23 @@ public abstract class MobileScreen {
     // --- Interruptions ---
 
     /**
-     * Waits for an element, clearing interruptions as they appear.
-     * <p>
-     * Dismissing once up front is not enough: a promotion can arrive a moment after the screen
-     * beneath it has already rendered, so a single sweep can run just before the thing it was
-     * meant to clear. Folding the sweep into the polling means the wait handles a promotion
-     * whenever it turns up inside the timeout.
+     * Waits for an element while continuously clearing promotional overlays.
+     * Folds promo dismissal directly into the polling loop to handle delayed
+     * interruptions that appear mid-wait.
      */
     protected void awaitPastPromos(By locator, String elementName) {
         log.info("Waiting for [{}], clearing any promotion in the way", elementName);
-        wait.until(elementName + " to be on screen with any promotion cleared", ignored -> {
-            dismissTransientPromos();
-            List<WebElement> found = driver.findElements(locator);
-            return !found.isEmpty() && found.getFirst().isDisplayed();
-        });
+        try {
+            wait.getDriverWait().until(driver -> {
+                dismissTransientPromos();
+                List<WebElement> found = driver.findElements(locator);
+                return !found.isEmpty() && found.getFirst().isDisplayed();
+            });
+        } catch (TimeoutException e) {
+            throw new org.openqa.selenium.TimeoutException(
+                    "Timed out waiting for " + elementName + " to be on screen with any promotion cleared", e);
+        }
+
     }
 
     /** Clears whatever first-run interruptions this platform's build of the app shows. */
