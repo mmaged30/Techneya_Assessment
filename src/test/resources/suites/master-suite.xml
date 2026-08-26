@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+
+<!--
+    The default suite: everything. Run with plain `mvn clean test`.
+    Needs a running Appium server and an attached device, because it includes the mobile test.
+    For a run that needs nothing but a network connection, use -Papi.
+
+    The two <test> blocks are separate so the report groups API and mobile results apart, so
+    either can be excluded without touching the other, and so parallel="methods" on the API
+    block cannot leak into the mobile one - one emulator hosts one session, so that test stays
+    on its implicit default of a single thread.
+
+    configfailurepolicy="continue" is deliberate. Each mobile test builds its own session in a
+    @BeforeMethod and shares no state, so one failed session says nothing about the next, and
+    each test is reported on its own merits. The trade-off: a systemic failure - no Appium
+    server at all - surfaces as several individual failures rather than one failure and a run
+    of skips.
+-->
+<suite name="Master Suite" configfailurepolicy="continue">
+
+    <listeners>
+        <listener class-name="org.Listeners.AllureEnvironmentWriter"/>
+        <listener class-name="org.Listeners.FailureListener"/>
+    </listeners>
+
+    <test name="Postal code API" parallel="methods" thread-count="4">
+        <classes>
+            <class name="tests.api.PostalCodeLookupTest"/>
+        </classes>
+    </test>
+
+    <test name="Wikipedia reading lists">
+        <classes>
+            <class name="tests.mobile.SearchTest"/>
+            <class name="tests.mobile.ReadingListTest"/>
+        </classes>
+    </test>
+
+</suite>

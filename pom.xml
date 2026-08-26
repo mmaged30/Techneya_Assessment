@@ -1,0 +1,328 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.example</groupId>
+    <artifactId>zippopotam-wikipedia-automation</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <name>API and Mobile Automation Framework</name>
+
+    <properties>
+        <!-- Java version is set once, by the compiler plugin's <release>. -->
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- =====================================================================
+             RUNTIME DEFAULTS
+             Every one of these is overridable from the command line with -D.
+             Because these live in <properties> rather than in an activeByDefault
+             profile, a plain `mvn test` still gets them even when you activate
+             an unrelated profile like -Pmobile. (activeByDefault switches OFF the
+             moment any other profile is named, which is the classic trap here.)
+             ===================================================================== -->
+        <suiteXmlFile>${project.build.testOutputDirectory}/suites/master-suite.xml</suiteXmlFile>
+
+        <!-- The AspectJ weaver, loaded as a -javaagent by surefire (see argLine below).
+             Named straight out of the local repository: the jar is always there once
+             dependencies resolve, it survives `mvn clean`, and an IDE running a TestNG
+             suite directly can resolve this path too - which a target/ path cannot,
+             because the IDE never runs the Maven phase that would stage it there.
+             Kept on one line: a wrapped value would put newlines inside the argLine. -->
+        <aspectj.weaver.jar>${settings.localRepository}/org/aspectj/aspectjweaver/${aspectj.version}/aspectjweaver-${aspectj.version}.jar</aspectj.weaver.jar>
+
+        <!-- Dependency versions, kept in one place -->
+        <testng.version>7.12.0</testng.version>
+        <appium.version>10.1.1</appium.version>
+        <selenium.version>4.45.0</selenium.version>
+        <restassured.version>6.0.0</restassured.version>
+        <log4j.version>2.25.4</log4j.version>
+        <lombok.version>1.18.46</lombok.version>
+        <jackson.version>2.20.0</jackson.version>
+        <poi.version>5.4.1</poi.version>
+        <allure.version>2.35.4</allure.version>
+        <aspectj.version>1.9.24</aspectj.version>
+        <surefire.version>3.5.6</surefire.version>
+    </properties>
+
+    <!-- =========================================================================
+         PROFILES
+
+         Profiles select WHICH SUITE runs, and nothing else. Everything that varies
+         per run - target URI, platform, device, timeouts - is a -D flag read by
+         ConfigManager, because a Maven property is NOT a system property and would
+         never reach the forked test JVM anyway:
+
+             mvn test                          -> API + mobile
+             mvn test -Papi                    -> API only, no device needed
+             mvn test -Pmobile                 -> mobile only, needs Appium + a device
+             mvn test -Papi -Dapi.base.uri=... -> retarget without editing a file
+         ========================================================================= -->
+    <profiles>
+
+        <!-- API only. No device involved, so api-suite.xml runs at a higher thread count. -->
+        <profile>
+            <id>api</id>
+            <properties>
+                <suiteXmlFile>${project.build.testOutputDirectory}/suites/api-suite.xml</suiteXmlFile>
+            </properties>
+        </profile>
+
+        <!-- Mobile only. Single-threaded by default: one emulator hosts one session. -->
+        <profile>
+            <id>mobile</id>
+            <properties>
+                <suiteXmlFile>${project.build.testOutputDirectory}/suites/mobile-suite.xml</suiteXmlFile>
+            </properties>
+        </profile>
+
+    </profiles>
+
+    <!-- =========================================================================
+         DEPENDENCY MANAGEMENT
+
+         java-client declares Selenium with an open version range, [4.42.0, 5.0),
+         which resolves to whatever is newest on the day the build runs and makes
+         the build non-reproducible. Pinning the three Selenium artifacts it uses
+         closes the range without pulling in selenium-java, whose browser drivers
+         this project has no use for.
+         ========================================================================= -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.seleniumhq.selenium</groupId>
+                <artifactId>selenium-api</artifactId>
+                <version>${selenium.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.seleniumhq.selenium</groupId>
+                <artifactId>selenium-remote-driver</artifactId>
+                <version>${selenium.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.seleniumhq.selenium</groupId>
+                <artifactId>selenium-support</artifactId>
+                <version>${selenium.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.14.0</version>
+                <configuration>
+                    <release>21</release>
+                    <!-- Keeps parameter names in the bytecode, which makes Allure step
+                         placeholders and reflection-based tooling far more readable. -->
+                    <parameters>true</parameters>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${surefire.version}</version>
+                <configuration>
+                    <suiteXmlFiles>
+                        <suiteXmlFile>${suiteXmlFile}</suiteXmlFile>
+                    </suiteXmlFiles>
+
+                    <!-- skipTests is deliberately NOT configured here: binding it to a custom
+                         property makes surefire ignore the standard -DskipTests flag. -->
+
+                    <!-- The AspectJ weaver is what makes Allure's @Step annotations actually
+                         record anything. Without this javaagent the report will only ever show
+                         Gherkin steps, never the controller and screen steps inside them. -->
+                    <argLine>-javaagent:${aspectj.weaver.jar}</argLine>
+
+                    <!-- Forwarded into the forked test JVM. The Allure Cucumber plugin reads
+                         this to decide where results land; without it they are written to an
+                         allure-results folder in the working directory instead of target/. -->
+                    <systemPropertyVariables>
+                        <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
+                    </systemPropertyVariables>
+
+                    <!-- Never let a green build hide the fact that nothing ran. -->
+                    <failIfNoTests>true</failIfNoTests>
+
+                    <!-- One JVM, reused. Parallelism is TestNG's job, not the forker's. -->
+                    <forkCount>1</forkCount>
+                    <reuseForks>true</reuseForks>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.aspectj</groupId>
+                        <artifactId>aspectjweaver</artifactId>
+                        <version>${aspectj.version}</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
+
+            <!-- Generates the HTML report:  mvn allure:report   /   mvn allure:serve -->
+            <plugin>
+                <groupId>io.qameta.allure</groupId>
+                <artifactId>allure-maven</artifactId>
+                <version>2.15.2</version>
+                <configuration>
+                    <reportVersion>2.35.1</reportVersion>
+                    <resultsDirectory>${project.build.directory}/allure-results</resultsDirectory>
+                </configuration>
+            </plugin>
+
+        </plugins>
+    </build>
+
+    <dependencies>
+
+        <!-- ============================ Execution ============================ -->
+
+        <!-- Source: https://mvnrepository.com/artifact/org.testng/testng
+             The runner underneath Cucumber: AbstractTestNGCucumberTests turns scenarios
+             into TestNG methods, which is what gives us suite XMLs and parallel execution. -->
+        <dependency>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+            <version>${testng.version}</version>
+        </dependency>
+
+        <!-- ============================== Mobile ============================= -->
+
+        <!-- Source: https://mvnrepository.com/artifact/io.appium/java-client
+             10.x is the line that speaks to an Appium 3 server. -->
+        <dependency>
+            <groupId>io.appium</groupId>
+            <artifactId>java-client</artifactId>
+            <version>${appium.version}</version>
+        </dependency>
+
+        <!-- Source: https://mvnrepository.com/artifact/org.seleniumhq.selenium/selenium-support
+             Declared, not merely inherited: Waits imports ExpectedConditions and WebDriverWait
+             directly, and a class you import should come from a dependency you asked for.
+             Version comes from dependencyManagement above. -->
+        <dependency>
+            <groupId>org.seleniumhq.selenium</groupId>
+            <artifactId>selenium-support</artifactId>
+        </dependency>
+
+        <!-- =============================== API =============================== -->
+
+        <!-- Source: https://mvnrepository.com/artifact/io.rest-assured/rest-assured -->
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <version>${restassured.version}</version>
+        </dependency>
+
+        <!-- Source: https://mvnrepository.com/artifact/io.rest-assured/json-schema-validator
+             Validates a response against a JSON Schema file, which is what the contract
+             scenarios assert against. Test scope: only the step definitions use it. -->
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>json-schema-validator</artifactId>
+            <version>${restassured.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Source: https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-databind
+             Declared explicitly to pin the version REST Assured uses to deserialise responses
+             onto the PostalCodeLocation / Place models. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
+<!-- ============================= Test data =========================== -->
+
+        <!-- Source: https://mvnrepository.com/artifact/org.apache.poi/poi-ooxml
+             Reads the .xlsx workbooks that drive the parameterised tests. poi-ooxml pulls in
+             poi itself; only the OOXML (.xlsx) format is used, never the legacy .xls one. -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+
+        <!-- ============================ Reporting ============================ -->
+
+<!-- Source: https://mvnrepository.com/artifact/io.qameta.allure/allure-testng
+             The ONLY Allure adaptor here. It turns each TestNG method into a report entry and
+             nests every @Step-annotated call inside it. -->
+        <dependency>
+            <groupId>io.qameta.allure</groupId>
+            <artifactId>allure-testng</artifactId>
+            <version>${allure.version}</version>
+        </dependency>
+
+        <!-- Source: https://mvnrepository.com/artifact/io.qameta.allure/allure-rest-assured
+             Supplies the filter that attaches every request and response to the report. -->
+        <dependency>
+            <groupId>io.qameta.allure</groupId>
+            <artifactId>allure-rest-assured</artifactId>
+            <version>${allure.version}</version>
+        </dependency>
+
+        <!-- ============================= Logging ============================= -->
+
+        <!-- Source: https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-core -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <version>${log4j.version}</version>
+        </dependency>
+
+        <!--
+            Source: https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-slf4j2-impl
+            Lombok's @Slf4j logs through SLF4J, so SLF4J needs a binding. This one routes it
+            into Log4j2, which is what makes log4j2.xml the file that actually controls
+            logging. There must only ever be ONE SLF4J binding on the classpath.
+        -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j2-impl</artifactId>
+            <version>${log4j.version}</version>
+        </dependency>
+
+        <!-- ============================== Tooling ============================ -->
+
+        <!-- Source: https://mvnrepository.com/artifact/org.projectlombok/lombok
+             Compile-time only: the annotations generate code and are not needed at runtime. -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!--
+            NOTE on `mvn dependency:analyze`: it reports five of the dependencies above as
+            "unused declared". They are all used at RUNTIME rather than compiled against, which
+            is something bytecode analysis cannot see, and every one of them has to stay:
+
+              allure-testng            discovered by TestNG as a service-loaded listener
+              jackson-databind         pins the version REST Assured deserialises with
+              log4j-core               the logging implementation
+              log4j-slf4j2-impl        the binding that routes SLF4J into it
+
+            The same command lists Selenium's api and remote-driver artifacts as "used
+            undeclared". They arrive through java-client, whose version range for them is closed
+            by the dependencyManagement block above, so the build stays reproducible without a
+            second set of declarations.
+
+            NOTE: aspectjweaver is deliberately NOT a project dependency. Allure needs it as a
+            -javaagent, not on the compile classpath, and no source file imports AspectJ. It is
+            declared as a surefire plugin dependency instead, where it is actually used.
+        -->
+    </dependencies>
+</project>

@@ -1,0 +1,8 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Not found",
+  "description": "Every rejected lookup - unknown country, unknown code, malformed code - answers with an empty JSON object and no error description. Asserting that emptiness is the contract; asserting a message would be asserting behaviour this service does not have.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {}
+}

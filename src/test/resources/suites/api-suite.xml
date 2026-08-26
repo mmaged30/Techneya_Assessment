@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+
+<!--
+    API only. Run with: mvn test -Papi
+
+    No device is involved, so the test methods run four at a time. The width lives here rather
+    than in Java because it is an execution decision, not a property of the tests - a CI agent
+    with more cores can raise it without touching code.
+
+    parallel="methods" runs different @Test methods on separate threads; thread-count is how
+    many at once. This parallelises across methods, not within one data-driven method's own
+    rows - knownPostalCodeResolvesToItsPlace's 5 rows still run one after another on whichever
+    thread that method landed on, while a different method runs on another thread at the same
+    time. Set on the <test> block rather than the <suite>, so it touches only this test.
+-->
+<suite name="API Suite" configfailurepolicy="continue">
+
+    <listeners>
+        <listener class-name="org.Listeners.AllureEnvironmentWriter"/>
+        <listener class-name="org.Listeners.FailureListener"/>
+    </listeners>
+
+    <test name="Postal code API" parallel="methods" thread-count="4">
+        <classes>
+            <class name="tests.api.PostalCodeLookupTest"/>
+        </classes>
+    </test>
+
+</suite>

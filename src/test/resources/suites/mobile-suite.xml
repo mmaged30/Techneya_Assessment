@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+
+<!--
+    Mobile only. Run with: mvn test -Pmobile
+    Requires a running Appium server and one attached device or emulator.
+
+    Serial by design: one emulator hosts one session, so no parallel attribute is set and the
+    suite runs on TestNG's default single thread. With a second device attached this becomes
+    parallel="methods" and a thread-count on the <test> block below - the same mechanism the
+    API suite already uses - and nothing else would change, because BaseMobileTest's driver is
+    thread-local and @BeforeMethod/@Test are guaranteed to share a thread under that mode.
+-->
+<suite name="Mobile Suite" configfailurepolicy="continue">
+
+    <listeners>
+        <listener class-name="org.Listeners.AllureEnvironmentWriter"/>
+        <listener class-name="org.Listeners.FailureListener"/>
+    </listeners>
+
+    <test name="Wikipedia reading lists">
+        <classes>
+            <class name="tests.mobile.SearchTest"/>
+            <class name="tests.mobile.ReadingListTest"/>
+        </classes>
+    </test>
+
+</suite>

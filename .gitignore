@@ -1,0 +1,35 @@
+# Build output
+target/
+
+# Test artifacts
+allure-results/
+allure-report/
+.allure/
+cucumber-reports/
+screenshots/
+logs/
+*.log
+
+# Application binaries - the app under test is installed on the device, never committed
+*.apk
+*.ipa
+*.app
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local overrides and secrets - NEVER commit these
+local.properties
+secrets.properties
+.env
