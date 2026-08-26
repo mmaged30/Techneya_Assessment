@@ -467,11 +467,3 @@ Android 14 (API 34) x86_64 emulator, Wikipedia 50600-r-2026-07-28.
 - **Test data lives in binary files.** `.xlsx` does not diff in git, so a data change cannot be
   reviewed in a pull request and a merge conflict means picking one file wholesale. CSV would
   avoid this at the cost of Excel's multi-sheet workbooks; the trade was made deliberately.
-
-## Optional improvements
-
-- A CI workflow: the API suite on every push, an emulator job on manual dispatch.
-- An iOS screens package, once a macOS machine is available.
-- More reading-list behaviour: renaming a list, moving an article between lists, offline
-  availability — all reachable from the screen objects that already exist.
-- A smoke subset for CI (`-Dgroups=smoke` already selects the end-to-end mobile test).
