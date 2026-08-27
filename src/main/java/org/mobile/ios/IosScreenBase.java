@@ -34,9 +34,6 @@ public abstract class IosScreenBase extends MobileScreen {
         return AppiumBy.iOSNsPredicateString(nsPredicate);
     }
 
-    protected static By classChain(String chain) {
-        return AppiumBy.iOSClassChain(chain);
-    }
 
     protected static By staticTextWithLabel(String value) {
         return predicate("type == 'XCUIElementTypeStaticText' AND label == '" + value + "'");

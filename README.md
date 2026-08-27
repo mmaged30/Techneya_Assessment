@@ -34,22 +34,27 @@ nothing about a platform.**
 src/main/java/org/
 ├── utils/                     The engine. App-agnostic, layer-agnostic.
 │   ├── ConfigManager          -D flag > config/<platform>.properties > config/global.properties
+│   ├── AppiumServer           starts/reuses the Appium server, stops what it started
 │   ├── DriverFactory          the only place a platform picks a driver
 │   ├── DriverManager          thread-local session holder
 │   ├── Waits                  the only place a WebDriverWait is built
-│   ├── ExcelReader            .xlsx -> header-keyed rows for a @DataProvider
+│   ├── ExcelReader            .xlsx rows -> typed objects, bound by header name
+│   ├── CustomAnnotations      @ExcelColumn, @ExcelDataSource
+│   ├── DataProviderSource     the single "ExcelFeed" provider the whole suite uses
 │   ├── ScreenshotUtils        failure evidence, collision-proof file names
 │   └── ExecutionFootprint     what the run actually touched, for the report
 │
-├── Listeners/                 AllureEnvironmentWriter (ISuiteListener)
-│                              FailureListener (ITestListener)
+├── listeners/                 AllureEnvironmentWriter (ISuiteListener)
+│                              TestExecutionListener (ITestListener)
 │
 ├── enums/                     Platform
 │
+├── models/                    api/     PostalCode, Place        (API responses)
+│                              excel/   PostalCodeLookupData, …  (one per sheet)
+│
 ├── api/                       Zippopotam under test
 │   ├── controllers/           BaseController, ZippopotamController
-│   ├── enums/                 Schema
-│   └── models/                PostalCode, Place
+│   └── constants/             ApiConstants, FrameworkConstants
 │
 └── mobile/                    Wikipedia under test
     ├── interfaces/            MainScreen, SearchScreen, ArticleScreen, …  (7 contracts)
@@ -57,10 +62,10 @@ src/main/java/org/
     ├── android/               Android*Screen + AndroidScreenBase
     └── ios/                   IosScreenBase, IosSearchScreen (reference — see iOS below)
 
-src/test/java/
-├── base/                      BaseApiTest, BaseMobileTest — lifecycle by inheritance
-├── data/                      TestData — every @DataProvider, the only place a sheet is named
-└── tests/api/, tests/mobile/  the tests themselves
+src/test/java/tests/
+├── TestResources              workbook paths, sheet names, schema paths
+├── api/                       BaseApiTest + PostalCodeLookupTest
+└── mobile/                    BaseMobileTest + SearchTest, ReadingListTest
 
 src/test/resources/
 ├── data/                      api-data.xlsx, mobile-data.xlsx
@@ -71,9 +76,9 @@ src/test/resources/
 
 **How a run flows:** Maven profile picks a TestNG suite → the suite lists test classes → a class
 extending `BaseMobileTest` gets an Appium session from `@BeforeMethod`, one extending
-`BaseApiTest` does not → `@DataProvider` methods in `TestData` read rows from Excel → the test
-calls controllers (API) or screen interfaces (mobile) → Allure records each method with its
-`@Step`-annotated calls nested inside.
+`BaseApiTest` does not → the `ExcelFeed` provider reads each test's `@ExcelDataSource` and hands
+it one typed row per invocation → the test calls controllers (API) or screen interfaces (mobile)
+→ Allure records each method with its `@Step`-annotated calls nested inside.
 
 **How a platform is chosen.** Exactly twice, both driven by the `platform` config key:
 `DriverFactory.create()` picks the driver, and `Screens.onboarding()` picks the screen
@@ -95,7 +100,7 @@ string to get wrong.
 | JDK | 21 | everything |
 | Maven | 3.9+ | everything |
 | Node.js | 18+ | Appium only |
-| Appium server | 3.x | mobile only |
+| Appium server | 3.x | mobile only - **started by the framework**, not by you |
 | Appium `uiautomator2` driver | 7.x | mobile only |
 | Android SDK + platform-tools | API 34 | mobile only |
 | Android emulator or device | Android 11+ | mobile only |
@@ -149,7 +154,7 @@ to change a run — every key is overridable with `-D`.
 
 | File | Holds |
 |---|---|
-| `global.properties` | API base URI, Appium server URL, timeouts, screenshot toggle, active platform |
+| `global.properties` | API base URI, Appium server URL + auto-start, timeouts, screenshot toggle, active platform |
 | `android.properties` | device name, app package/activity, reset behaviour |
 | `ios.properties` | device name, bundle id, reset behaviour |
 
@@ -175,22 +180,33 @@ mvn clean test -Papi
 
 ### Mobile only
 
-Start the Appium server in one terminal:
+**Only the emulator has to be started by hand — the framework starts Appium itself.**
+
+Launch the device, either from Android Studio (Device Manager → ▶ beside the AVD) or from a
+terminal:
 
 ```bash
-appium
+%ANDROID_HOME%\emulator\emulator.exe -avd <your-avd> -no-snapshot-load -no-boot-anim
 ```
 
-Start an emulator (or attach a device) in another, and confirm it is visible:
+Confirm it is up before running:
 
 ```bash
 adb devices
 ```
 
-Then run:
+Then:
 
 ```bash
 mvn clean test -Pmobile
+```
+
+`AppiumServer` starts a server on `appium.server.url`, and stops it when the run ends. If one is
+**already** listening there — because you ran `appium` yourself — it is detected and reused, and
+is *not* shut down afterwards. To always manage the server yourself:
+
+```bash
+mvn test -Pmobile -Dappium.auto.start=false
 ```
 
 ### Everything
@@ -199,21 +215,17 @@ mvn clean test -Pmobile
 mvn clean test
 ```
 
-This needs a running Appium server and an attached device, because it includes the mobile suite.
+This needs an attached device, because it includes the mobile suite.
 
 ### Running a subset by group
 
-Every test carries TestNG groups. They work independently of the profiles:
+Every test carries TestNG groups, which work independently of the profiles:
 
 ```bash
-mvn test -Papi -Dgroups=negative
+mvn test -Dgroups=api
 ```
 
-```bash
-mvn test -Papi -Dgroups=positive -DexcludedGroups=contract
-```
-
-Available groups: `api`, `mobile`, `positive`, `negative`, `contract`, `smoke`, `search`.
+Available groups: `api`, `mobile`.
 
 ### Re-running only what failed
 
@@ -269,7 +281,7 @@ rather than information.
 |---|---|---|---|
 | `knownPostalCodeResolvesToItsPlace` | 5 | `KnownPostalCodes` | US, DE, GB, CA — five-digit, alphanumeric outward and forward-sortation formats |
 | `postalCodeCoveringSeveralDistrictsReturnsEveryOne` | 1 | inline | `de/01067` returns 3 places, each fully described |
-| `countryCodeIsAcceptedInAnyCasing` | 3 | `CountryCasing` | `us`, `US`, `Us` all resolve |
+| `countryCodeIsAcceptedInAnyCasing` | 3 | `CountryCasing` | `us`, `US`, `Us` all resolve, expectations read from the sheet |
 | `successfulLookupMatchesTheLocationSchema` | 1 | inline | JSON Schema, `additionalProperties: false` |
 | `lookupIsRejected` | 5 | `RejectedLookups` | unknown country, uncovered country, non-existent code, non-numeric code, too-short code |
 | `rejectedLookupStillAnswersAsJson` | 1 | inline | 404 carries `{}` and the JSON content type |
@@ -314,11 +326,31 @@ intelligence."* So the test asserts both:
 
 ## Design notes worth knowing
 
-**Data-driven testing uses one mechanism.** A TestNG `@DataProvider` reading an `.xlsx` sheet,
-for both layers, with every provider declared in `data.TestData` — the only class that names a
-workbook or a sheet. Rows are keyed by the sheet's **header**, not by column position, so a test
-reads `row.get("postalCode")` and stays correct when a column is reordered or inserted. Adding a
-case is a row in Excel; no Java changes.
+**Data-driven testing uses one mechanism, and one provider.** A test declares its source on
+itself and receives a typed object per row:
+
+```java
+@ExcelDataSource(workbook = TestResources.API_WORKBOOK,
+        sheetName = TestResources.KNOWN_POSTAL_CODES_SHEET,
+        pojoClass = PostalCodeLookupData.class)
+@Test(dataProvider = "ExcelFeed", dataProviderClass = DataProviderSource.class, groups = {"api"})
+public void knownPostalCodeResolvesToItsPlace(PostalCodeLookupData data) { ... }
+```
+
+`DataProviderSource` is the **only** `@DataProvider` in the suite — it reads the annotation
+reflectively, so a new data-driven test never means writing another one. Row types live in
+`org.models.excel`, one per sheet.
+
+Fields bind to columns **by header name**, not by position:
+
+```java
+@ExcelColumn("postalCode")
+private String postalCode;
+```
+
+Inserting or reordering a column in the spreadsheet therefore cannot silently re-point a field
+onto its neighbour's data, and a name with no matching header fails at load listing the headers
+that do exist. Adding a case is a row in Excel; no Java changes.
 
 Cells are written and read as **text**. Excel would store `01067` as the number 1067 and drop
 the leading zero, and a numeric cell would arrive as `90210.0`; the API takes strings, so text is
@@ -335,9 +367,17 @@ a search-widget advert, a games dialog, a share tooltip, a recommendations card.
 tied to any one screen and can arrive *after* the screen beneath them has rendered, so clearing
 them is folded into the waiting itself rather than done once up front.
 
-**Failure evidence is captured by a listener, not by teardown.** `FailureListener.onTestFailure`
-fires *before* the `@AfterMethod` that quits the driver, so the screenshot is taken while the
-session is still alive. That ordering is a guarantee of `ITestListener`, not a trick.
+**Failure evidence is captured by a listener, not by teardown.**
+`TestExecutionListener.onTestFailure` fires *before* the `@AfterMethod` that quits the driver, so
+the screenshot is taken while the session is still alive. That ordering is a guarantee of
+`ITestListener`, not a trick.
+
+**The Appium server is the framework's problem, not yours.** `AppiumServer` starts one on first
+use, reuses anything already listening on the configured port, and only ever stops a server it
+started itself — via a shutdown hook, so an abnormal exit cannot orphan a process holding port
+4723. It is lazy: the first call comes from `DriverFactory.create()`, so an API-only run never
+starts a server at all. The client's own 20-second startup timeout was too short here — a cold
+Appium 3 start measured 22s — so `appium.server.startup.timeout` defaults to 90.
 
 **Synchronisation is explicit throughout — there is no `Thread.sleep` anywhere in the project.**
 Two durations look like sleeps and are not: the hold of a long press and the travel time of a

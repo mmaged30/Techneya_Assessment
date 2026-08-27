@@ -33,10 +33,6 @@ public class BaseController {
         return threadLocalSpec.get();
     }
 
-    /** Called from BaseTest teardown so a pooled thread never reuses a stale spec. */
-    public static void unloadSpec() {
-        threadLocalSpec.remove();
-    }
 
     /**
      * Returns a request that can be completed with .when().get(), .queryParam(), etc.

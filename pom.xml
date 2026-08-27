@@ -306,7 +306,7 @@
         </dependency>
 
         <!--
-            NOTE on `mvn dependency:analyze`: it reports five of the dependencies above as
+            NOTE on `mvn dependency:analyze`: it reports four of the dependencies above as
             "unused declared". They are all used at RUNTIME rather than compiled against, which
             is something bytecode analysis cannot see, and every one of them has to stay:
 
